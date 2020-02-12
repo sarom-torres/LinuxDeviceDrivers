@@ -2,17 +2,25 @@
 #include <linux/module.h>
 #include <linux/types.h>
 #include <linux/fs.h> //usada para as funções do numero do modulo
-//#include "scull.h"
+#include "scull.h"
 
 //SCULL_MAJOR está definida em scull.h
-//int scull_major = SCULL_MAJOR;
-int scull_major = 0;
+int scull_major = SCULL_MAJOR;
+//int scull_major = 0;
 int scull_minor = 0;
-//int scull_nr_devs = SCULL_NR_DEVS;
-int scull_nr_devs = 4;
+int scull_nr_devs = SCULL_NR_DEVS;
+//int scull_nr_devs = 4;
 dev_t dev = 0;
 
 MODULE_LICENSE("DuaL BSD/GPL");
+
+// struct file_operations scull_fops = {
+//     ponteiro para a propria estrutura, impede que o módulo seja descarregado enquanto está em uso
+//     .owner = THIS_MODULE, 
+//     usado para mudar a posição atual de leitura/escrita no file
+//     .llseek = scull_llseek,
+//     
+// };
 
 static int __init scull_init(void){
 	int result;
