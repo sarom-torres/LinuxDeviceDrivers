@@ -21,7 +21,7 @@ struct scull_dev * scull_devices; //alocado no __scull_init
 
 MODULE_LICENSE("DuaL BSD/GPL");
 
-/*
+
 struct file_operations scull_fops = {
     //ponteiro para a propria estrutura, impede que o módulo seja descarregado enquanto está em uso
     .owner = THIS_MODULE, 
@@ -38,14 +38,21 @@ struct file_operations scull_fops = {
 // Configurando a estrutura char_dev para esse device
 //## Não deveria ser um cdev no argumento ao inves de um scull_dev
 static void scull_setup_cdev(struct scull_dev *dev, int index){
-    int err, devno = MKDEV(scull_major, scull_minor + index); //##Pq fazer o MKDEV novamente?
+    int err, devno = MKDEV(scull_major, scull_minor + index); //##Pq fazer o MKDEV novamente com o idex?
     
     //cdev representa o char device internamente
     // inicializando a estrutura cdev. 
     cdev_init(&dev->cdev, &scull_fops);
+    dev->cdev.owner = THIS_MODULE;
+    dev->cdev.pos = &scull_fops;
+    
+    //informa ao kernel o device
+    err = cdev_add(&dev->cdev,devno,1); //arg: (estrutura cdev, numero do device, quantia de devices que podem ser associados a ele)
+    
+    if(err) printk(KERN_NOTICE "Error %d adding scull%d",err,index);
     
     
-}*/
+}
 
 static int __init scull_init(void){
 	int result;
@@ -71,7 +78,8 @@ static int __init scull_init(void){
 		return result;
 	}
 
-
+// FAZER A ALOCAÇÃO DO SCULL_DEVICES
+	
 	return 0;
 }
 
