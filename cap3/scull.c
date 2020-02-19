@@ -96,20 +96,28 @@ struct scull_qset *scull_follow(struct scull_dev *dev, int n){
     
     //Aloca o primeiro qset caso necessário
     if(!qs){
+        printk("SCULL_FOLLOW : alocando o primeiro qset");
         qs = dev->data = kmalloc(sizeof(struct scull_qset),GFP_KERNEL);
-        if(qs == NULL) return NULL;
+        if(qs == NULL){
+            printk("SCULL_FOLLOW : qset nulo");
+            return NULL;
+        }
         memset(qs,0,sizeof(struct scull_qset));
     }
     
     while(n--){
         if(!qs->next){
             qs->next = kmalloc(sizeof(struct scull_qset),GFP_KERNEL);
-            if(qs->next == NULL) return NULL;
+            if(qs->next == NULL){
+                printk("SCULL_FOLLOW : qset->next nulo");
+                return NULL;
+            }
             memset(qs->next,0,sizeof(struct scull_qset));
         }
         qs = qs->next;
         continue;
     }
+    printk("SCULL_FOLLOW : retornando qset");
     return qs;
     
 }
@@ -157,11 +165,13 @@ ssize_t scull_read(struct file *filp, char __user *buf,size_t count, loff_t *f_p
         goto out;
     }
     
-    //printk(KERN_WARNING "Dado lido: %02X",dptr->data);
+    printk("Dado lido: %02X",dptr->data);
     
     *f_pos += count;
     retval = count;
         
+    return 0;
+    
     out:
         printk("SCULL_READ : out function");
         return retval;
@@ -182,36 +192,51 @@ ssize_t scull_write(struct file *filp, const char __user *buf,size_t count, loff
     q_pos = rest % quantum;
     
     dptr = scull_follow(dev,item);
-    if(dptr==NULL)
+    
+    if(dptr==NULL){
+        printk("SCULL_WRITE : dptr é null");
         goto out;
+    }
+    
+//*************************************************************************    
     if(!dptr->data){
         dptr->data = kmalloc(qset * sizeof(char *),GFP_KERNEL);
-        if(dptr->data)
+        if(dptr->data){
+            printk("SCULL_WRITE : kmalloc realizado");
             goto out;
+        }
         memset(dptr->data,0,qset*sizeof(char *));
     }
-    
+//************************************************************************
     if(!dptr->data[s_pos]){
+        printk("SCULL_WRITE : alocando quantum");
         dptr->data[s_pos] = kmalloc(quantum,GFP_KERNEL);
-        if(!dptr->data[s_pos])
+        if(!dptr->data[s_pos]){
+            printk("SCULL_WRITE : não alocou o quantum");
             goto out;
+        }
     }
     
-    if(count > quantum - q_pos)
-        count = quantum - q_pos;
+    if(count > quantum - q_pos) count = quantum - q_pos;
+    
+    
     
     if(raw_copy_from_user(dptr->data[s_pos] + q_pos, buf, count)){
+        printk("SCULL_WRITE : não escreveu na memória ");
         retval = -EFAULT;
         goto out;
     }
     
-    //printk(KERN_WARNING "Dado escrito: %02X",dptr->data);
+   // printk("SCULL_WRITE : bytes_unloc = %d",bytes_unloc);
+    printk("SCULL_WRITE : Dado escrito = %02X",dptr->data);
     
     *f_pos += count;
     retval = count;
     
     if(dev->size < *f_pos)
         dev->size  = *f_pos;
+    
+    return 0;
     
     out:
         printk("SCULL_WRITE : out function");
@@ -258,7 +283,7 @@ int scull_release(struct inode *inode, struct file *filp){
 static void __exit scull_exit(void){
     
     int i;
-/*    dev_t devno = MKDEV(scull_major, scull_minor);
+    dev_t devno = MKDEV(scull_major, scull_minor);
     
     //liberando todas as entradas de char dev
     if(scull_devices){
@@ -271,7 +296,7 @@ static void __exit scull_exit(void){
 	
 	//cancela o registro do major number
 	unregister_chrdev_region(devno,scull_nr_devs);
-*/	printk(KERN_ALERT "SCULL_EXIT : Goodbye, cruel world\n");
+	printk(KERN_ALERT "SCULL_EXIT : Goodbye, cruel world\n");
 }
 
 static int __init scull_init(void){
@@ -287,7 +312,7 @@ static int __init scull_init(void){
 		//faz a alocação dinâmica do major number
 		result = alloc_chrdev_region(&dev,scull_minor,scull_nr_devs,"scull");
 		scull_major = MAJOR(dev);
-		printk(KERN_ALERT "scull_major zero! Result: %d\n",result);
+		printk(KERN_ALERT "Hello, beautiful world!");
 		printk("Major: %d\n",MAJOR(dev));
 		printk("Minor: %d\n",MINOR(dev));
 	}
@@ -320,6 +345,7 @@ static int __init scull_init(void){
         scull_setup_cdev(&scull_devices[i],i);
     }
     
+    return 0;
     
     fail:
         printk("SCULL_INIT : Fail function");
