@@ -2,7 +2,7 @@
 
 module="scull"
 device="scull"
-mode="664"
+mode="777"
 
 #invoca insmod com todos os argumentos
 /sbin/insmod ./$module.ko $* || exit 1
