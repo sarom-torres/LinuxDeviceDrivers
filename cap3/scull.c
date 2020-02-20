@@ -170,7 +170,7 @@ ssize_t scull_read(struct file *filp, char __user *buf,size_t count, loff_t *f_p
     *f_pos += count;
     retval = count;
         
-    return 0;
+    return retval;
     
     out:
         printk("SCULL_READ : out function");
@@ -201,8 +201,8 @@ ssize_t scull_write(struct file *filp, const char __user *buf,size_t count, loff
 //*************************************************************************    
     if(!dptr->data){
         dptr->data = kmalloc(qset * sizeof(char *),GFP_KERNEL);
-        if(dptr->data){
-            printk("SCULL_WRITE : kmalloc realizado");
+        if(!dptr->data){
+            printk("SCULL_WRITE : kmalloc falhou");
             goto out;
         }
         memset(dptr->data,0,qset*sizeof(char *));
@@ -236,7 +236,7 @@ ssize_t scull_write(struct file *filp, const char __user *buf,size_t count, loff
     if(dev->size < *f_pos)
         dev->size  = *f_pos;
     
-    return 0;
+    return retval;
     
     out:
         printk("SCULL_WRITE : out function");
