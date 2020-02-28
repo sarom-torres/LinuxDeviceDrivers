@@ -9,6 +9,7 @@
 #include <linux/errno.h> //usada para os valores de erro
 #include <asm/uaccess.h> //contém as funções copy_*_user
 
+
 #include "scull.h"
 
 
@@ -117,7 +118,7 @@ struct scull_qset *scull_follow(struct scull_dev *dev, int n){
         qs = qs->next;
         continue;
     }
-    printk("SCULL_FOLLOW : retornando qset");
+//    printk("SCULL_FOLLOW : retornando qset");
     return qs;
     
 }
@@ -134,17 +135,26 @@ ssize_t scull_read(struct file *filp, char __user *buf,size_t count, loff_t *f_p
     struct scull_dev *dev = filp->private_data;
     struct scull_qset *dptr; //primeiro item da lista
     int quantum = dev->quantum, qset = dev->qset;
-    int itemsize = quantum *qset; //##não entendi a sintaxe
+    int itemsize = quantum*qset; 
     int item, s_pos, q_pos, rest;
     ssize_t retval = 0;
+   
+    //##Está correto o EAGAIN não aparecer??
+    //Caso não tenha dados para serem lidos retorna EAGAIN
+    if(dev->size == 0){
+        printk("SCULL_READ: não há recursos.");
+        retval = EAGAIN;
+        goto out;
+        
+    }
     
-    //##checagem para caso a posição do arquivo seja maior que o tamanho do device
+    //checagem para caso a posição do arquivo seja maior que o tamanho do device
     if(*f_pos >= dev->size)
         goto out;
     if(*f_pos + count > dev->size)
         count = dev->size - *f_pos;
     
-    //#para que essas linhas??
+    //para que essas linhas??
     item = (long)*f_pos / itemsize;
     rest = (long)*f_pos % itemsize;
     s_pos = rest / quantum;
@@ -152,20 +162,19 @@ ssize_t scull_read(struct file *filp, char __user *buf,size_t count, loff_t *f_p
     
     dptr = scull_follow(dev,item);
     
-    if(dptr==NULL || !dptr->data || !dptr->data[s_pos])
+    if(dptr==NULL || !dptr->data || !dptr->data[s_pos]){
+        printk("Entrou aqui 1");
         goto out;
+    }
     
     //somente leitura até o final deste quantum
     if(count > quantum - q_pos)
         count = quantum - q_pos;
-    
-    //##VER SE OK MUDAR PARA raw_copy_to_user
+      
     if(raw_copy_to_user(buf,dptr->data[s_pos] + q_pos, count)){
         retval = -EFAULT;
         goto out;
     }
-    
-    printk("Dado lido: %02X",dptr->data);
     
     *f_pos += count;
     retval = count;
