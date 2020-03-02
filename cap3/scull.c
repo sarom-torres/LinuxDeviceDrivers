@@ -143,7 +143,7 @@ ssize_t scull_read(struct file *filp, char __user *buf,size_t count, loff_t *f_p
     //Caso não tenha dados para serem lidos retorna EAGAIN
     if(dev->size == 0){
         printk("SCULL_READ: não há recursos.");
-        retval = EAGAIN;
+        retval = -EAGAIN;
         goto out;
         
     }
@@ -163,7 +163,6 @@ ssize_t scull_read(struct file *filp, char __user *buf,size_t count, loff_t *f_p
     dptr = scull_follow(dev,item);
     
     if(dptr==NULL || !dptr->data || !dptr->data[s_pos]){
-        printk("Entrou aqui 1");
         goto out;
     }
     
@@ -176,6 +175,11 @@ ssize_t scull_read(struct file *filp, char __user *buf,size_t count, loff_t *f_p
         goto out;
     }
     
+/*    else{
+//      errado!!!!
+        dptr->data[s_pos] = NULL;
+    }
+ */   
     *f_pos += count;
     retval = count;
         
