@@ -23,6 +23,10 @@
 #define SCULL_QSET 1000
 #endif
 
+#ifndef SCULL_MEMORY_MAX
+#define SCULL_MEMORY_MAX 10
+#endif
+
 //-------------------------- | Structs
 
 //Representação dos quantum sets
@@ -47,6 +51,7 @@ extern int scull_major;
 extern int scull_nr_devs;
 extern int scull_quantum;
 extern int scull_qset;
+extern int scull_memory;
 
 
 //----------------------- | Protótipos das funções

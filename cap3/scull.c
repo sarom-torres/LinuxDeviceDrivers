@@ -18,7 +18,7 @@ int scull_minor = 0;
 int scull_nr_devs = SCULL_NR_DEVS;
 int scull_quantum = SCULL_QUANTUM;
 int scull_qset = SCULL_QSET;
-
+int scull_memory = SCULL_MEMORY_MAX;
 
 struct scull_dev *scull_devices; //representação interna do device | alocado no __scull_init 
 
@@ -118,7 +118,6 @@ struct scull_qset *scull_follow(struct scull_dev *dev, int n){
         qs = qs->next;
         continue;
     }
-//    printk("SCULL_FOLLOW : retornando qset");
     return qs;
     
 }
@@ -126,7 +125,7 @@ struct scull_qset *scull_follow(struct scull_dev *dev, int n){
 
 /*args: 
  * file: estrutura file
- * buf: ponteiro para o buffer do usurario que contém os dados
+ * buf: ponteiro para o buffer do usuario que contém os dados
  * count: tamanho do dado para transferir
  * f_ops: indica a posição do arquivo que o usuário está acessando
  */
@@ -139,20 +138,21 @@ ssize_t scull_read(struct file *filp, char __user *buf,size_t count, loff_t *f_p
     int item, s_pos, q_pos, rest;
     ssize_t retval = 0;
    
-    //##Está correto o EAGAIN não aparecer??
     //Caso não tenha dados para serem lidos retorna EAGAIN
     if(dev->size == 0){
-        printk("SCULL_READ: não há recursos.");
         retval = -EAGAIN;
         goto out;
         
     }
+    
+    printk("SCULL_READ : dev_size = %ld",dev->size);
     
     //checagem para caso a posição do arquivo seja maior que o tamanho do device
     if(*f_pos >= dev->size)
         goto out;
     if(*f_pos + count > dev->size)
         count = dev->size - *f_pos;
+    
     
     //para que essas linhas??
     item = (long)*f_pos / itemsize;
@@ -175,14 +175,9 @@ ssize_t scull_read(struct file *filp, char __user *buf,size_t count, loff_t *f_p
         goto out;
     }
     
-/*    else{
-//      errado!!!!
-        dptr->data[s_pos] = NULL;
-    }
- */   
     *f_pos += count;
     retval = count;
-        
+
     return retval;
     
     out:
@@ -198,6 +193,24 @@ ssize_t scull_write(struct file *filp, const char __user *buf,size_t count, loff
     int itemsize = quantum *qset;
     int item, s_pos, q_pos, rest;
     ssize_t retval = -ENOMEM;
+    
+    printk("SCULL_WRITE : count = %ld",count);
+    printk("SCULL_WRITE : scull_memory = %d",scull_memory);
+    printk("SCULL_WRITE : dev_size = %ld",dev->size);
+    
+    if(dev->size > scull_memory || (dev->size + count) > scull_memory){
+        printk("SCULL_WRITE : Entrou aqui 1");
+        retval = -ENOMEM;
+        goto out;
+    }
+    
+//     if((dev->size + count) > scull_memory){
+//         printk("Reajustando o tamanho");
+//         count = scull_memory - dev->size;
+//         retval = count;
+//     }
+    
+
     
     item = (long)*f_pos / itemsize;
     rest = (long)*f_pos % itemsize;
@@ -239,16 +252,18 @@ ssize_t scull_write(struct file *filp, const char __user *buf,size_t count, loff
         retval = -EFAULT;
         goto out;
     }
-    
-   // printk("SCULL_WRITE : bytes_unloc = %d",bytes_unloc);
-    printk("SCULL_WRITE : Dado escrito = %02X",dptr->data);
-    
+        
     *f_pos += count;
     retval = count;
     
-    if(dev->size < *f_pos)
-        dev->size  = *f_pos;
     
+    //mudei aqui
+    if(dev->size < *f_pos){
+        dev->size  = *f_pos;
+        printk("SCULL_WRITE : dev_size: %lu",dev->size);
+    }
+    
+
     return retval;
     
     out:
@@ -357,7 +372,7 @@ static int __init scull_init(void){
         //sema_init(&scull_devices[i].sem,1);
         scull_setup_cdev(&scull_devices[i],i);
     }
-    
+        
     return 0;
     
     fail:
