@@ -20,6 +20,7 @@ int scull_quantum = SCULL_QUANTUM;
 int scull_qset = SCULL_QSET;
 int scull_memory = SCULL_MEMORY_MAX;
 
+
 struct scull_dev *scull_devices; //representação interna do device | alocado no __scull_init 
 
 
@@ -153,8 +154,6 @@ ssize_t scull_read(struct file *filp, char __user *buf,size_t count, loff_t *f_p
     if(*f_pos + count > dev->size)
         count = dev->size - *f_pos;
     
-    
-    //para que essas linhas??
     item = (long)*f_pos / itemsize;
     rest = (long)*f_pos % itemsize;
     s_pos = rest / quantum;
@@ -193,22 +192,23 @@ ssize_t scull_write(struct file *filp, const char __user *buf,size_t count, loff
     int itemsize = quantum *qset;
     int item, s_pos, q_pos, rest;
     ssize_t retval = -ENOMEM;
+ //   int all_size = count;
     
-    printk("SCULL_WRITE : count = %ld",count);
-    printk("SCULL_WRITE : scull_memory = %d",scull_memory);
-    printk("SCULL_WRITE : dev_size = %ld",dev->size);
-    
-    if(dev->size > scull_memory || (dev->size + count) > scull_memory){
-        printk("SCULL_WRITE : Entrou aqui 1");
+    //Limita tamanho da memória
+    if(dev->size >= scull_memory){
         retval = -ENOMEM;
         goto out;
     }
-    
-//     if((dev->size + count) > scull_memory){
-//         printk("Reajustando o tamanho");
-//         count = scull_memory - dev->size;
-//         retval = count;
+//     if(dev->size == scull_memory){
+//         retval = all_size;
+//         printk("SCULL_WRITE : Entrou aqui 2");
+//         goto out;
 //     }
+    
+    if((dev->size + count) > scull_memory){
+        count = scull_memory - dev->size;
+//        all_size -= count;
+    }
     
 
     
@@ -238,32 +238,25 @@ ssize_t scull_write(struct file *filp, const char __user *buf,size_t count, loff
         printk("SCULL_WRITE : alocando quantum");
         dptr->data[s_pos] = kmalloc(quantum,GFP_KERNEL);
         if(!dptr->data[s_pos]){
-            printk("SCULL_WRITE : não alocou o quantum");
             goto out;
         }
     }
-    
+
     if(count > quantum - q_pos) count = quantum - q_pos;
-    
-    
-    
+  
+    //O retorno é a quantidade de dados que ainda precisam ser copiadas caso exista falhas
     if(raw_copy_from_user(dptr->data[s_pos] + q_pos, buf, count)){
         printk("SCULL_WRITE : não escreveu na memória ");
         retval = -EFAULT;
         goto out;
     }
-        
+    
     *f_pos += count;
     retval = count;
     
-    
-    //mudei aqui
-    if(dev->size < *f_pos){
+    if(dev->size < *f_pos)
         dev->size  = *f_pos;
-        printk("SCULL_WRITE : dev_size: %lu",dev->size);
-    }
-    
-
+  
     return retval;
     
     out:
