@@ -91,7 +91,6 @@ static void scull_setup_cdev(struct scull_dev *dev, int index){
 
 //------------------------------------------------------------------------------- READ E WRITE
 
-//Follow the list
 struct scull_qset *scull_follow(struct scull_dev *dev, int n){
     
     struct scull_qset *qs = dev->data;
@@ -138,6 +137,7 @@ ssize_t scull_read(struct file *filp, char __user *buf,size_t count, loff_t *f_p
     int itemsize = quantum*qset; 
     int item, s_pos, q_pos, rest;
     ssize_t retval = 0;
+    //int n_bytes = 0; // qtidade de bytes que não foram lidos
    
     //Caso não tenha dados para serem lidos retorna EAGAIN
     if(dev->size == 0){
@@ -168,13 +168,24 @@ ssize_t scull_read(struct file *filp, char __user *buf,size_t count, loff_t *f_p
     //somente leitura até o final deste quantum
     if(count > quantum - q_pos)
         count = quantum - q_pos;
-      
+    
+    //raw_copy_to_user retorna a quantia de bytes que não foram copiados 
+    //n_bytes = ;
     if(raw_copy_to_user(buf,dptr->data[s_pos] + q_pos, count)){
+        // falta remover os valores que foram copiados em parte
         retval = -EFAULT;
         goto out;
     }
+   else{
+        printk("SCULL_READ : Liberando memoria");
+//         struct scull_qset *ptr = memset(dptr->data,0,count);
+//         kfree(ptr->data);
+        memset(dptr->data[s_pos] + q_pos,0,count);
+        //kfree(dptr->data);
+    }
     
     *f_pos += count;
+    //*f_pos = 0;
     retval = count;
 
     return retval;

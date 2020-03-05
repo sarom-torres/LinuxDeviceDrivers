@@ -24,7 +24,7 @@
 #endif
 
 #ifndef SCULL_MEMORY_MAX
-#define SCULL_MEMORY_MAX 10
+#define SCULL_MEMORY_MAX 4000
 #endif
 
 //-------------------------- | Structs

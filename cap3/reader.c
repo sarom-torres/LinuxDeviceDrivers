@@ -11,12 +11,13 @@
 int main(){
     
     char *path = "/dev/scull0"; 
-    int fd, qtd, data_size = 8;
-    
+    int fd, qtd, data_size = 6;
+    int qtd2;
     fd = open(path,O_RDONLY);
     
     //calloc(numero de elementos,tamanho do elementos)
     char *buffer = (char*) calloc(100,sizeof(char));
+    char *buffer2 = (char*) calloc(100,sizeof(char));
     
     if(fd < 0){
         printf("Erro ao acessar dispositivo\n");
@@ -27,6 +28,14 @@ int main(){
         }else{
             buffer[qtd] = '\0';
             printf("Dados lidos: %s \n",buffer);
+        }
+        sleep(5);
+        qtd2 = read(fd,buffer2,data_size);
+        if(qtd2 == -1){
+            printf("Erro %d: %s\n",errno,strerror(errno));
+        }else{
+            buffer2[qtd2] = '\0';
+            printf("Dados lidos: %s \n",buffer2);
         }
     }
     
