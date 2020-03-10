@@ -15,14 +15,14 @@
 
 
 #ifndef SCULL_MEMORY_MAX
-#define SCULL_MEMORY_MAX 4000
+#define SCULL_MEMORY_MAX 1024
 #endif
 
 
 struct scull_dev{
-    void **data; //ponteiro para o primeiro quantum sets
+    char data[SCULL_MEMORY_MAX]; 
     unsigned int size; //Quantia de dados armazenados
-    unsigned int memory;  //memoria ##faz sentido cada scull dev ter sua propria memoria ou deveria ser uma paratodo o código
+    u16 start, end; // referencias para inicio e fim da fila
     struct cdev cdev;
 };
 

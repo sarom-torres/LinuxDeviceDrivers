@@ -46,15 +46,6 @@ static void scull_setup_cdev(struct scull_dev *dev, int index){
     
 }
 
-int scull_trim(struct scull_dev *dev){
-        
-    kfree(dev);
-    dev->size = 0;
-    dev->quantum = scull_quantum;
-    dev->qset = scull_qset;
-    dev->data = NULL;
-    return 0;
-}
 
 //---------- READ e WRITE -----------------------------------------------------------------
 
@@ -69,20 +60,16 @@ ssize_t scull_read(struct file *filp, char __user *buf,size_t count, loff_t *f_p
         printk("SCULL_READ : entrou aqui 1");
         goto out;
     }
-    
-    if(*f_pos > dev->size)
-        goto out;
-    if(*f_pos + count > dev->size)
-        count = dev->size - *f_pos;
-    
+        
     if(raw_copy_to_user(buf,dev->data, count)){
         retval = -EFAULT;
-        printk("SCULL_READ : entrou aqui 3");
         goto out;
     }
     
+//     dev->start += count;
+//     dev->size -= count;
+    
     printk("SCULL_READ : dev->data =  %s",dev->data);
-    *f_pos += count;
     retval = count;
     
     return retval;
@@ -97,40 +84,27 @@ ssize_t scull_write(struct file *filp, const char __user *buf,size_t count, loff
     struct scull_dev *dev = filp->private_data;
     ssize_t retval = -ENOMEM;
     
-    if(dev->size >= dev->memory){
+    if(dev->size >= scull_memory_max){
         retval = -ENOMEM;
         goto out;
     }
     
-    if(dev->size + count > dev->memory){
+    //arrumar para truncar dados
+    if(dev->size + count > scull_memory_max){
         retval = -ENOMEM;
         goto out;  
     }
-    
-    //## quanto de memória alocar??
-    dev->data = kmalloc(8*sizeof(char),GFP_KERNEL);
-    memset(dev->data,0,8*sizeof(char)); 
-    
-    if(raw_copy_from_user(dev->data,buf,count)){
-        printk("SCULL_WRITE : não escreveu na memoria");
+        
+    if(raw_copy_from_user(&dev->data[dev->end],buf,count)){
         retval = -EFAULT;
         goto out;
     }
-    
     printk("SCULL_WRITE : dev->data =  %s",dev->data);
     
-    *f_pos += count;
+    dev->end += count; 
+    dev->size += count;
     retval = count;
     
-    
-    if(dev->size < *f_pos)
-        dev->size  = *f_pos;
-    
-    printk("SCULL_WRITE : dev->size2 =  %d",dev->size);
-    
-//     if(*f_pos > dev->memory){
-//         *f_pos = 0;
-//     }
     
     return retval;
     
@@ -176,8 +150,6 @@ static void __exit scull_exit(void){
     
     if(scull_devices){
         for(i=0;i<scull_nr_devs;i++){
-            //LIBERAR MEMORIA
-            scull_trim(scull_devices+i);
             cdev_del(&scull_devices[i].cdev);
         }
         kfree(scull_devices);
@@ -215,7 +187,6 @@ static int __init scull_init(void){
     scull_devices = kmalloc (scull_nr_devs*sizeof(struct scull_dev),GFP_KERNEL);
     
     if(!scull_devices){
-        printk("SCULL_INIT : Não está alocando memória");
         result = -ENOMEM;
         goto fail;
     }
@@ -225,8 +196,9 @@ static int __init scull_init(void){
     memset(scull_devices,0,scull_nr_devs*sizeof(struct scull_dev));
     
     for(i=0; i<scull_nr_devs;i++){
-        scull_devices[i].memory = scull_memory_max;
         scull_devices[i].size = 0;
+        scull_devices[i].start = 0;
+        scull_devices[i].end = 0;
         scull_setup_cdev(&scull_devices[i],i);
     }
        
@@ -242,13 +214,3 @@ static int __init scull_init(void){
 module_init(scull_init);
 module_exit(scull_exit);
 
-//     if(!dev->data){
-//         printk("SCULL_WRITE : alocando primeiro data");
-//         dev->data = kmalloc(sizeof(char),GFP_KERNEL);
-//         if(dev->data == null){
-//             printk("SCULL_WRITE : dev->data nulo");
-//             return NULL;
-//         }
-//         memset(dev->data,0,sizeof(char));
-//     }
-// 
