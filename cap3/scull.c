@@ -176,7 +176,7 @@ ssize_t scull_read(struct file *filp, char __user *buf,size_t count, loff_t *f_p
         retval = -EFAULT;
         goto out;
     }
-   else{
+    else{
         printk("SCULL_READ : Liberando memoria");
 //         struct scull_qset *ptr = memset(dptr->data,0,count);
 //         kfree(ptr->data);

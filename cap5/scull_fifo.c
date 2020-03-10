@@ -6,6 +6,7 @@
 #include <linux/kernel.h> //contém a macro container_of
 #include <linux/fcntl.h> //contém as f_flags
 #include <linux/slab.h> //usada para o gerenciamento de memória
+#include <asm/uaccess.h> //contém as funções copy_*_user
 
 #include "scull.h"
 
@@ -45,16 +46,55 @@ static void scull_setup_cdev(struct scull_dev *dev, int index){
     
 }
 
+int scull_trim(struct scull_dev *dev){
+        
+    kfree(dev);
+    dev->size = 0;
+    dev->quantum = scull_quantum;
+    dev->qset = scull_qset;
+    dev->data = NULL;
+    return 0;
+}
+
 //---------- READ e WRITE -----------------------------------------------------------------
 
 
 ssize_t scull_read(struct file *filp, char __user *buf,size_t count, loff_t *f_pos){
-    return 0;
+    
+    struct scull_dev *dev = filp->private_data;
+    ssize_t retval = 0;
+    
+    if(dev->size==0){
+        retval = -EAGAIN;
+        printk("SCULL_READ : entrou aqui 1");
+        goto out;
+    }
+    
+    if(*f_pos > dev->size)
+        goto out;
+    if(*f_pos + count > dev->size)
+        count = dev->size - *f_pos;
+    
+    if(raw_copy_to_user(buf,dev->data, count)){
+        retval = -EFAULT;
+        printk("SCULL_READ : entrou aqui 3");
+        goto out;
+    }
+    
+    printk("SCULL_READ : dev->data =  %s",dev->data);
+    *f_pos += count;
+    retval = count;
+    
+    return retval;
+    
+    out:
+        printk("SCULL_READ : out function");
+        return retval;
 }
 
 ssize_t scull_write(struct file *filp, const char __user *buf,size_t count, loff_t *f_pos){
     
-    struct scull_dev * dev = filp->private_data;
+    struct scull_dev *dev = filp->private_data;
     ssize_t retval = -ENOMEM;
     
     if(dev->size >= dev->memory){
@@ -67,20 +107,33 @@ ssize_t scull_write(struct file *filp, const char __user *buf,size_t count, loff
         goto out;  
     }
     
+    //## quanto de memória alocar??
+    dev->data = kmalloc(8*sizeof(char),GFP_KERNEL);
+    memset(dev->data,0,8*sizeof(char)); 
     
-    if(raw_copy_from_user(dev->data[f_pos],buf,count)){
+    if(raw_copy_from_user(dev->data,buf,count)){
         printk("SCULL_WRITE : não escreveu na memoria");
         retval = -EFAULT;
         goto out;
     }
     
+    printk("SCULL_WRITE : dev->data =  %s",dev->data);
+    
     *f_pos += count;
     retval = count;
-    dev->size += count;
     
-    if(*f_pos > dev->memory){
-        *f_pos = 0;
-    }
+    
+    if(dev->size < *f_pos)
+        dev->size  = *f_pos;
+    
+    printk("SCULL_WRITE : dev->size2 =  %d",dev->size);
+    
+//     if(*f_pos > dev->memory){
+//         *f_pos = 0;
+//     }
+    
+    return retval;
+    
     out:
         printk("SCULL_WRITE : out function");
         return retval;
@@ -124,9 +177,10 @@ static void __exit scull_exit(void){
     if(scull_devices){
         for(i=0;i<scull_nr_devs;i++){
             //LIBERAR MEMORIA
+            scull_trim(scull_devices+i);
             cdev_del(&scull_devices[i].cdev);
         }
-        
+        kfree(scull_devices);
     }
     
     unregister_chrdev_region(devno,scull_nr_devs);
