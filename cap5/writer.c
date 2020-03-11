@@ -11,9 +11,9 @@
 int main(){
     
     char *path = "/dev/scull_fifo0"; 
-    int fd, fd2, qtd, qtd2, size_msg1,size_msg2, size_read = 32;
-    char *msg1 = "Ola";
-    char *msg2 = " mundo e scull";
+    int fd, fd2, qtd, qtd2, size_msg1,size_msg2, size_read = 4;
+    char *msg1 = "0123456789";
+    char *msg2 = "abcdefgh";
     
     fd = open(path,O_WRONLY);
     fd2 = open(path,O_RDONLY);

@@ -57,19 +57,20 @@ ssize_t scull_read(struct file *filp, char __user *buf,size_t count, loff_t *f_p
     
     if(dev->size==0){
         retval = -EAGAIN;
-        printk("SCULL_READ : entrou aqui 1");
         goto out;
     }
         
-    if(raw_copy_to_user(buf,dev->data, count)){
+    if(raw_copy_to_user(buf,&dev->data[dev->start], count)){
         retval = -EFAULT;
         goto out;
     }
+    memset(&dev->data[dev->start],0,count);
     
-//     dev->start += count;
-//     dev->size -= count;
+     dev->start += count;
+     dev->size -= count;
     
-    printk("SCULL_READ : dev->data =  %s",dev->data);
+    printk("SCULL_READ : dev->data =  %s",buf);
+    printk("SCULL_READ : dev->size =  %d",dev->size);
     retval = count;
     
     return retval;
@@ -99,13 +100,13 @@ ssize_t scull_write(struct file *filp, const char __user *buf,size_t count, loff
         retval = -EFAULT;
         goto out;
     }
-    printk("SCULL_WRITE : dev->data =  %s",dev->data);
+    
     
     dev->end += count; 
     dev->size += count;
     retval = count;
-    
-    
+    printk("SCULL_WRITE : dev->data =  %s",dev->data);
+    printk("SCULL_WRITE : dev->size =  %d",dev->size);
     return retval;
     
     out:

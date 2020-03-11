@@ -11,7 +11,7 @@
 int main(){
     
     char *path = "/dev/scull_fifo0"; 
-    int fd, qtd, data_size = 20;
+    int fd, qtd, data_size = 4;
     int qtd2;
     fd = open(path,O_RDONLY);
     
