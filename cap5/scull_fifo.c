@@ -91,8 +91,6 @@ ssize_t scull_write(struct file *filp, const char __user *buf,size_t count, loff
     
     struct scull_dev *dev = filp->private_data;
     ssize_t retval = -ENOMEM;
-    int total_size = 0;
-    int ret; //usado para o retorno da função copy_from_user
 
     
     if(dev->size >= scull_memory_max){
@@ -101,7 +99,6 @@ ssize_t scull_write(struct file *filp, const char __user *buf,size_t count, loff
     }
     
     int cap = scull_memory_max - dev->size; //quanto cabe no dispositivo
-    total_size = dev->size + count;
     
     if(count > cap) //truncando dados
         count = cap;
@@ -109,15 +106,33 @@ ssize_t scull_write(struct file *filp, const char __user *buf,size_t count, loff
 
     if(dev->start < dev->end){
         int diff = scull_memory_max - dev->end; //diferenca entre o end e o limite do vetor
-        if(count > diff){
-            raw_copy_from_user(&dev->data[dev->end],buf,diff); //copia a quantia que cabe na diferenca
-            char * rest_data = buf+diff;
+        if(count > diff){ 
+            //se há necessidade de truncar os dados trunca e faz a realocação do ponteiro end 
+            if(raw_copy_from_user(&dev->data[dev->end],buf,diff)){//copia a quantia que cabe na diferenca
+                retval = -EFAULT;
+                goto out;
+            } 
+            char * rest_data = buf+diff; //desloca o ponteiro para o restante dos dados a serem copiados
             dev->end = 0;
-            raw_copy_from_user(&dev->data[dev->end],rest_data,(count-diff));
+            
+            if(raw_copy_from_user(&dev->data[dev->end],rest_data,(count-diff))){
+                retval = -EFAULT;
+                goto out;
+            }
             dev->end += (count-diff);
+        }else{
+            //se não há necessidade de truncar os dados apenas copia
+            if(raw_copy_from_user(&dev->data[dev->end],buf,count)){
+                retval = -EFAULT;
+                goto out;               
+            }
+            dev->end +=count;
         }
     }else{
-        raw_copy_from_user(&dev->data[dev->end],buf,count);
+        if(raw_copy_from_user(&dev->data[dev->end],buf,count)){
+            retval = -EFAULT;
+            goto out;
+        }
         dev->end += count; 
     }
         
@@ -238,69 +253,4 @@ static int __init scull_init(void){
 module_init(scull_init);
 module_exit(scull_exit);
 
-
-//     struct scull_dev *dev = filp->private_data;
-//     ssize_t retval = -ENOMEM;
-//     int total_size = 0;
-//     int ret; //usado para o retorno da função copy_from_user
-// 
-//     
-//     if(dev->size >= scull_memory_max){
-//         retval = -ENOMEM;
-//         goto out;
-//     }
-//     
-//     int cap = scull_memory_max - dev->size; //quanto cabe no dispositivo
-//     int diff = scull_memory_max-dev->end; //diferenca entre o end e o limite do vetor
-//     total_size = dev->size + count;
-//     
-//     if(count > cap) //truncando dados
-//         count = cap;
-// 
-// 
-//     
-//  //   count = total_size - scull_memory_max;
-////     ret = raw_copy_from_user(&dev->data[dev->end],buf,count);
-//     arrumar para truncar dados
-//     if(diff <= cap){ //Precisa ser igual???
-//         if(raw_copy_from_user(&dev->data[dev->end],buf,count)){
-//             retval = -EFAULT;
-//             goto out;
-//         }
-//     }else{
-//         char * rest_data = buf+diff;//restando dos dados depois do truncamento
-//         
-//         ret = raw_copy_from_user(&dev->data[dev->end],buf,diff); //copia apenas a diferenca
-//         dev->end = 0; // coloca o end no zero
-//         ret = raw_copy_from_user(&dev->data[dev->end],rest_data,count-diff); // copia o restante dos dados
-//         dev->end +=(count-diff); //desloca o end 
-//         dev->size += count; //atualiza o tamanho 
-//         retval = count; //atualiza o valor de retorno
-//         goto out;        
-//     }
-//   
-// 
-//     
-//     if(raw_copy_from_user(&dev->data[dev->end],buf,count)){
-//         retval = -EFAULT;
-//         goto out;
-//     }
-//     
-//     dev->end += count; 
-//     dev->size += count;
-//     retval = count;
-//     
-//      if(dev->end >= scull_memory_max)
-//          dev->end = 0;
-//     
-//     char *ptr = &dev->data[dev->start];
-//     printk("--------------ESCRITA-------------------");
-//     printk("SCULL_WRITE : dev->ptrWrite =  %s",ptr);
-//     printk("SCULL_WRITE : dev->size =  %d",dev->size);
-//     printk("SCULL_WRITE : dev->end =  %d",dev->end);
-//     return retval;
-//     
-//     out:
-//         printk("SCULL_WRITE : out function");
-//         return retval;
 
