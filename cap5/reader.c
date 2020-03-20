@@ -30,14 +30,15 @@ int main(){
             printf("Dados lidos: %s \n",buffer);
         }
         sleep(5);
-        qtd2 = read(fd,buffer2,data_size);
-        if(qtd2 == -1){
-            printf("Erro %d: %s\n",errno,strerror(errno));
-        }else{
-            buffer2[qtd2] = '\0';
-            printf("Dados lidos: %s \n",buffer2);
-        }
+//         qtd2 = read(fd,buffer2,data_size);
+//         if(qtd2 == -1){
+//             printf("Erro %d: %s\n",errno,strerror(errno));
+//         }else{
+//             buffer2[qtd2] = '\0';
+//             printf("Dados lidos: %s \n",buffer2);
+//         }
     }
-    
+    free(buffer);
+    free(buffer2);
     return 0;
 }

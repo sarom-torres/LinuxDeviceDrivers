@@ -15,7 +15,7 @@
 
 
 #ifndef SCULL_MEMORY_MAX
-#define SCULL_MEMORY_MAX 1024
+#define SCULL_MEMORY_MAX 10
 #endif
 
 
