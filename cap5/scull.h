@@ -15,7 +15,7 @@
 
 
 #ifndef SCULL_MEMORY_MAX
-#define SCULL_MEMORY_MAX 10
+#define SCULL_MEMORY_MAX 1024
 #endif
 
 
@@ -24,6 +24,7 @@ struct scull_dev{
     unsigned int size; //Quantia de dados armazenados
     u16 start, end; // referencias para inicio e fim da fila
     struct cdev cdev;
+    struct semaphore sem;
 };
 
 

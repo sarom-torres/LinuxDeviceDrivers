@@ -7,6 +7,7 @@
 #include <linux/fcntl.h> //contém as f_flags
 #include <linux/slab.h> //usada para o gerenciamento de memória
 #include <asm/uaccess.h> //contém as funções copy_*_user
+#include <linux/semaphore.h> //usada para os semáforos
 
 #include "scull.h"
 
@@ -55,6 +56,12 @@ ssize_t scull_read(struct file *filp, char __user *buf,size_t count, loff_t *f_p
     struct scull_dev *dev = filp->private_data;
     ssize_t retval = 0;
     
+    //decrementa semáforo, se a operação é interrompida o valor de retorno é diferente de zero 
+    //entao ele retorna o erro referente a uma chamada de sistema que é reiniciavél.
+    if(down_interruptible(&dev->sem)){
+        return -ERESTARTSYS;
+    }
+    
     if(dev->size==0){
         retval = -EAGAIN;
         goto out;
@@ -74,16 +81,17 @@ ssize_t scull_read(struct file *filp, char __user *buf,size_t count, loff_t *f_p
         dev->start = 0;
     
     printk("--------------LEITURA-------------------");
-    printk("SCULL_READ : dev->buffer =  %s",buf);
-    printk("SCULL_READ : dev->size =  %d",dev->size);
-    printk("SCULL_READ : dev->start =  %d",dev->start);
+    //printk("SCULL_READ : dev->buffer =  %s",buf);
+    //printk("SCULL_READ : dev->size =  %d",dev->size);
+    //printk("SCULL_READ : dev->start =  %d",dev->start);
     
     retval = count;
     
-    return retval;
+    //return retval;
     
     out:
         printk("SCULL_READ : out function");
+        up(&dev->sem);
         return retval;
 }
 
@@ -92,6 +100,10 @@ ssize_t scull_write(struct file *filp, const char __user *buf,size_t count, loff
     struct scull_dev *dev = filp->private_data;
     ssize_t retval = -ENOMEM;
 
+    if(down_interruptible(&dev->sem)){
+        return -ERESTARTSYS;
+    }
+    
     
     if(dev->size >= scull_memory_max){
         retval = -ENOMEM;
@@ -143,12 +155,13 @@ ssize_t scull_write(struct file *filp, const char __user *buf,size_t count, loff
     char *ptr = &dev->data[dev->start];
     printk("--------------ESCRITA-------------------");
     printk("SCULL_WRITE : dev->ptrWrite =  %s",ptr);
-    printk("SCULL_WRITE : dev->size =  %d",dev->size);
-    printk("SCULL_WRITE : dev->end =  %d",dev->end);
-    return retval;
+    //printk("SCULL_WRITE : dev->size =  %d",dev->size);
+    //printk("SCULL_WRITE : dev->end =  %d",dev->end);
+    //return retval;
     
     out:
         printk("SCULL_WRITE : out function");
+        up(&dev->sem);
         return retval;
 }
 
@@ -168,9 +181,9 @@ int scull_open(struct inode *inode, struct file *filp){
     
     filp->private_data = dev;
     
-    if((filp->f_flags & O_ACCMODE) == O_WRONLY){
+    //if((filp->f_flags & O_ACCMODE) == O_WRONLY){
         //LIBERA MEMORIA
-    }
+    //}
     
     return 0;
     
@@ -195,7 +208,7 @@ static void __exit scull_exit(void){
     }
     
     unregister_chrdev_region(devno,scull_nr_devs);
-    printk(KERN_ALERT "SCULL_EXIT : Goodbye, cruel world\n");
+    printk(KERN_ALERT "SCULL_EXIT : !Hasta la vista, baby!\n");
 }
 
 static int __init scull_init(void){
@@ -211,7 +224,7 @@ static int __init scull_init(void){
     }else{
         result = alloc_chrdev_region(&dev,scull_minor,scull_nr_devs,"scull_fifo");
         scull_major = MAJOR(dev);
-        printk(KERN_ALERT "SCULL_INIT : Hello, beautiful world!");
+        printk(KERN_ALERT "SCULL_INIT : Hi, I am T-800!");
         printk("SCULL_INIT : Major: %d\n",MAJOR(dev));
     }
     
@@ -238,6 +251,7 @@ static int __init scull_init(void){
         scull_devices[i].size = 0;
         scull_devices[i].start = 0;
         scull_devices[i].end = 0;
+        sema_init(&scull_devices[i].sem,1);
         scull_setup_cdev(&scull_devices[i],i);
     }
        
