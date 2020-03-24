@@ -50,71 +50,13 @@ static void scull_setup_cdev(struct scull_dev *dev, int index){
 
 //---------- READ e WRITE -----------------------------------------------------------------
 
-
-ssize_t scull_read(struct file *filp, char __user *buf,size_t count, loff_t *f_pos){
+//escreve os dados no buffer do dispositivo, retorna a quantia de dados gravados
+ssize_t scull_recorder(struct scull_dev *dev, const char __user *buffer, size_t count,size_t gap){
     
-    struct scull_dev *dev = filp->private_data;
-    ssize_t retval = 0;
+    size_t retval = 0;
     
-    //decrementa semáforo, se a operação é interrompida o valor de retorno é diferente de zero 
-    //entao ele retorna o erro referente a uma chamada de sistema que é reiniciavél.
-    if(down_interruptible(&dev->sem)){
-        return -ERESTARTSYS;
-    }
+    char *buf = buffer+gap;
     
-    if(dev->size==0){
-        retval = -EAGAIN;
-        goto out;
-    }
-        
-    if(raw_copy_to_user(buf,&dev->data[dev->start], count)){
-        retval = -EFAULT;
-        goto out;
-    }
-    
-    memset(&dev->data[dev->start],0,count);
-    
-    dev->start += count;
-    dev->size -= count;
-    
-    if(dev->start >= scull_memory_max)
-        dev->start = 0;
-    
-    printk("--------------LEITURA-------------------");
-    //printk("SCULL_READ : dev->buffer =  %s",buf);
-    //printk("SCULL_READ : dev->size =  %d",dev->size);
-    //printk("SCULL_READ : dev->start =  %d",dev->start);
-    
-    retval = count;
-    
-    //return retval;
-    
-    out:
-        printk("SCULL_READ : out function");
-        up(&dev->sem);
-        return retval;
-}
-
-ssize_t scull_write(struct file *filp, const char __user *buf,size_t count, loff_t *f_pos){
-    
-    struct scull_dev *dev = filp->private_data;
-    ssize_t retval = -ENOMEM;
-
-    if(down_interruptible(&dev->sem)){
-        return -ERESTARTSYS;
-    }
-    
-    
-    if(dev->size >= scull_memory_max){
-        retval = -ENOMEM;
-        goto out;
-    }
-    
-    int cap = scull_memory_max - dev->size; //quanto cabe no dispositivo
-    
-    if(count > cap) //truncando dados
-        count = cap;
-
 
     if(dev->start < dev->end){
         int diff = scull_memory_max - dev->end; //diferenca entre o end e o limite do vetor
@@ -147,13 +89,119 @@ ssize_t scull_write(struct file *filp, const char __user *buf,size_t count, loff
         }
         dev->end += count; 
     }
-        
-
+    
     dev->size += count;
     retval = count;
     
-    char *ptr = &dev->data[dev->start];
+    out:
+        return retval;
+}
+
+
+
+ssize_t scull_read(struct file *filp, char __user *buf,size_t count, loff_t *f_pos){
+    
+    struct scull_dev *dev = filp->private_data;
+    ssize_t retval = 0;
+    int flag = 0;
+    
+    //decrementa semáforo, se a operação é interrompida o valor de retorno é diferente de zero 
+    //entao ele retorna o erro referente a uma chamada de sistema que é reiniciavél.
+//     if(down_interruptible(&dev->sem)){
+//         return -ERESTARTSYS;
+//     }
+    
+    if(dev->size==0){
+        retval = -EAGAIN;
+        goto out;
+    }
+    
+    if(count > dev->size)
+        count = dev->size;
+    
+    if(dev->size == scull_memory_max) 
+        flag++;
+    
+    if(raw_copy_to_user(buf,&dev->data[dev->start], count)){
+        retval = -EFAULT;
+        flag--;
+        goto out;
+    }
+    
+    memset(&dev->data[dev->start],0,count);
+    
+    dev->start += count;
+    dev->size -= count;
+    
+    if(dev->start >= scull_memory_max)
+        dev->start = 0;
+    
+    printk("--------------LEITURA-------------------");
+    //printk("SCULL_READ : dev->buffer =  %s",buf);
+    //printk("SCULL_READ : dev->size =  %d",dev->size);
+    //printk("SCULL_READ : dev->start =  %d",dev->start);
+    
+    retval = count;
+    
+    //return retval;
+    
+    out:
+        printk("SCULL_READ : out function");
+        printk("SCULL_READ : dev->data =  %s",buf);
+        if(flag > 0)up(&dev->sem);
+        return retval;
+}
+
+ssize_t scull_write(struct file *filp, const char __user *buf,size_t count, loff_t *f_pos){
+    
+    struct scull_dev *dev = filp->private_data;
+    ssize_t retval = 0, ret = 0;
+    size_t new_count = 0; //quantia de dados que será gravada quando liberada a memória
+    size_t gap = 0; //posicao no qual deve iniciar a próxima escrita 
+    unsigned int cap = 0;//capacidade de memória livre 
+    
     printk("--------------ESCRITA-------------------");
+    
+    cap = scull_memory_max - dev->size;//capacidade de memória livre 
+    printk("SCULL_WRITE : capacidadeA %d ",cap);
+    
+    if(dev->size < scull_memory_max && (dev->size+count) < cap){
+        retval = scull_recorder(dev,buf,count,gap); //grava
+        printk("SCULL_WRITE : Entrou na < scull_memory_max");
+    }else{    
+        
+        while(count != 0){ //enquanto existirem dados para gravar
+            printk("SCULL_WRITE : Entrou no while");
+            
+            if(down_interruptible(&dev->sem)) return -ERESTARTSYS; //espera
+            
+            cap = scull_memory_max - dev->size; //capacidade de espaço livre após liberação de memoria
+            printk("SCULL_WRITE : capacidadeB %d ",cap);
+                
+            if(count > cap) new_count = cap; // qtia de dados gravada será a capacidade da memória 
+            else new_count = count; //prepara para gravar todos os dados restante
+            printk("SCULL_WRITE : new_count %ld ",new_count);
+
+            ret = scull_recorder(dev,buf,new_count,gap); //grava os dados na memória
+                
+            if(ret < 0){ //caso tenha dado algum erro ao gravar 
+                retval = ret;
+                goto out;
+            }else{
+                retval += ret;
+            }
+            gap += new_count; 
+            count -= new_count;
+            printk("SCULL_WRITE : count_final %ld ",count);
+        }      
+
+    }
+    
+    
+
+    
+    char *ptr = &dev->data[dev->start];
+
     printk("SCULL_WRITE : dev->ptrWrite =  %s",ptr);
     //printk("SCULL_WRITE : dev->size =  %d",dev->size);
     //printk("SCULL_WRITE : dev->end =  %d",dev->end);
@@ -161,7 +209,7 @@ ssize_t scull_write(struct file *filp, const char __user *buf,size_t count, loff
     
     out:
         printk("SCULL_WRITE : out function");
-        up(&dev->sem);
+        //up(&dev->sem);
         return retval;
 }
 
@@ -251,6 +299,7 @@ static int __init scull_init(void){
         scull_devices[i].size = 0;
         scull_devices[i].start = 0;
         scull_devices[i].end = 0;
+        //semaforo usado para proteger a escrita e leitura
         sema_init(&scull_devices[i].sem,1);
         scull_setup_cdev(&scull_devices[i],i);
     }

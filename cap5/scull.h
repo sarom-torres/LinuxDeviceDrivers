@@ -15,7 +15,7 @@
 
 
 #ifndef SCULL_MEMORY_MAX
-#define SCULL_MEMORY_MAX 1024
+#define SCULL_MEMORY_MAX 10
 #endif
 
 
@@ -39,6 +39,8 @@ extern int scull_nr_devs;
 
 //int scull_p_init(dev_t dev);
 //int scull_trim(struct scull_dev *dev);
+
+ssize_t scull_recorder(struct scull_dev *dev, const char __user *buffer,size_t count,size_t gap);
 
 ssize_t scull_read(struct file *filp, char __user *buf,size_t count, loff_t *f_pos);
 
