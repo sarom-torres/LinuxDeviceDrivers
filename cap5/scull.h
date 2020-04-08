@@ -24,7 +24,8 @@ struct scull_dev{
     unsigned int size; //Quantia de dados armazenados
     u16 start, end; // referencias para inicio e fim da fila
     struct cdev cdev;
-    struct semaphore sem;
+    struct semaphore sem; // semaforo para bloquear processos
+    //struct mutex mutexWR; // semaforo para proteger escrita e leitura
 };
 
 
@@ -40,7 +41,7 @@ extern int scull_nr_devs;
 //int scull_p_init(dev_t dev);
 //int scull_trim(struct scull_dev *dev);
 
-ssize_t scull_recorder(struct scull_dev *dev, const char __user *buffer,size_t count,size_t gap);
+ssize_t scull_recorder(struct scull_dev *dev, const char __user *buffer,size_t count,size_t gap, int flag);
 
 ssize_t scull_read(struct file *filp, char __user *buf,size_t count, loff_t *f_pos);
 

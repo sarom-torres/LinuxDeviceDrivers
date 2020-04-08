@@ -8,6 +8,7 @@
 #include <linux/slab.h> //usada para o gerenciamento de memória
 #include <asm/uaccess.h> //contém as funções copy_*_user
 #include <linux/semaphore.h> //usada para os semáforos
+#include <linux/mutex.h> //usada para mutex
 
 #include "scull.h"
 
@@ -51,12 +52,13 @@ static void scull_setup_cdev(struct scull_dev *dev, int index){
 //---------- READ e WRITE -----------------------------------------------------------------
 
 //escreve os dados no buffer do dispositivo, retorna a quantia de dados gravados
-ssize_t scull_recorder(struct scull_dev *dev, const char __user *buffer, size_t count,size_t gap){
+ssize_t scull_recorder(struct scull_dev *dev, const char __user *buffer, size_t count,size_t gap, int flag){
     
     size_t retval = 0;
     
     char *buf = buffer+gap;
     
+    printk("SCULL_RECORDER : dev->size / FIRST =  %d",dev->size);
 
     if(dev->start < dev->end){
         int diff = scull_memory_max - dev->end; //diferenca entre o end e o limite do vetor
@@ -64,6 +66,7 @@ ssize_t scull_recorder(struct scull_dev *dev, const char __user *buffer, size_t 
             //se há necessidade de truncar os dados trunca e faz a realocação do ponteiro end 
             if(raw_copy_from_user(&dev->data[dev->end],buf,diff)){//copia a quantia que cabe na diferenca
                 retval = -EFAULT;
+                flag--;
                 goto out;
             } 
             char * rest_data = buf+diff; //desloca o ponteiro para o restante dos dados a serem copiados
@@ -71,6 +74,7 @@ ssize_t scull_recorder(struct scull_dev *dev, const char __user *buffer, size_t 
             
             if(raw_copy_from_user(&dev->data[dev->end],rest_data,(count-diff))){
                 retval = -EFAULT;
+                flag--;
                 goto out;
             }
             dev->end += (count-diff);
@@ -78,6 +82,7 @@ ssize_t scull_recorder(struct scull_dev *dev, const char __user *buffer, size_t 
             //se não há necessidade de truncar os dados apenas copia
             if(raw_copy_from_user(&dev->data[dev->end],buf,count)){
                 retval = -EFAULT;
+                flag--;
                 goto out;               
             }
             dev->end +=count;
@@ -85,14 +90,17 @@ ssize_t scull_recorder(struct scull_dev *dev, const char __user *buffer, size_t 
     }else{
         if(raw_copy_from_user(&dev->data[dev->end],buf,count)){
             retval = -EFAULT;
+            flag--;
             goto out;
         }
         dev->end += count; 
     }
+    printk("SCULL_RECORDER : dev->size / SECOND =  %d",dev->size);
     
     dev->size += count;
     retval = count;
     
+    printk("SCULL_RECORDER : dev->size / THIRD = %d",dev->size);
     out:
         return retval;
 }
@@ -105,15 +113,12 @@ ssize_t scull_read(struct file *filp, char __user *buf,size_t count, loff_t *f_p
     ssize_t retval = 0;
     int flag = 0;
     
-    //decrementa semáforo, se a operação é interrompida o valor de retorno é diferente de zero 
-    //entao ele retorna o erro referente a uma chamada de sistema que é reiniciavél.
-//     if(down_interruptible(&dev->sem)){
-//         return -ERESTARTSYS;
-//     }
-    
+ /*  
+    if(mutex_lock_interruptible(&dev->mutexWR)) // protege a leitura
+        return -ERESTARTSYS;
+ */   
     if(dev->size==0){
-        retval = -EAGAIN;
-        goto out;
+        if(down_interruptible(&dev->sem)) return -ERESTARTSYS;
     }
     
     if(count > dev->size)
@@ -146,27 +151,38 @@ ssize_t scull_read(struct file *filp, char __user *buf,size_t count, loff_t *f_p
     //return retval;
     
     out:
-        printk("SCULL_READ : out function");
-        printk("SCULL_READ : dev->data =  %s",buf);
+        //printk("SCULL_READ : out function");
+       // printk("SCULL_READ : dev->data =  %s",buf);
+       // printk("SCULL_READ : dev->size =  %d",dev->size);
         if(flag > 0)up(&dev->sem);
+ //       mutex_unlock(&dev->mutexWR);
         return retval;
 }
 
 ssize_t scull_write(struct file *filp, const char __user *buf,size_t count, loff_t *f_pos){
-    
+     
     struct scull_dev *dev = filp->private_data;
     ssize_t retval = 0, ret = 0;
     size_t new_count = 0; //quantia de dados que será gravada quando liberada a memória
     size_t gap = 0; //posicao no qual deve iniciar a próxima escrita 
     unsigned int cap = 0;//capacidade de memória livre 
-    
+    int flag = 0; //para sinalizar que o semaforo deve ser liberado
+
+    if(dev->size == 0) flag++;
+/*
+    if(mutex_lock_interruptible(&dev->mutexWR)) // protege a escrita
+        return -ERESTARTSYS;
+*/    
     printk("--------------ESCRITA-------------------");
     
     cap = scull_memory_max - dev->size;//capacidade de memória livre 
     printk("SCULL_WRITE : capacidadeA %d ",cap);
     
     if(dev->size < scull_memory_max && (dev->size+count) < cap){
-        retval = scull_recorder(dev,buf,count,gap); //grava
+        printk("SCULL_WRITE : dev->size / antes =  %d",dev->size);
+        printk("SCULL_WRITE : count =  %d",count);
+        retval = scull_recorder(dev,buf,count,gap,flag); //grava
+        printk("SCULL_WRITE : dev->size / depois =  %d",dev->size);
         printk("SCULL_WRITE : Entrou na < scull_memory_max");
     }else{    
         
@@ -176,13 +192,11 @@ ssize_t scull_write(struct file *filp, const char __user *buf,size_t count, loff
             if(down_interruptible(&dev->sem)) return -ERESTARTSYS; //espera
             
             cap = scull_memory_max - dev->size; //capacidade de espaço livre após liberação de memoria
-            printk("SCULL_WRITE : capacidadeB %d ",cap);
-                
+                 
             if(count > cap) new_count = cap; // qtia de dados gravada será a capacidade da memória 
             else new_count = count; //prepara para gravar todos os dados restante
-            printk("SCULL_WRITE : new_count %ld ",new_count);
 
-            ret = scull_recorder(dev,buf,new_count,gap); //grava os dados na memória
+            ret = scull_recorder(dev,buf,new_count,gap,flag); //grava os dados na memória
                 
             if(ret < 0){ //caso tenha dado algum erro ao gravar 
                 retval = ret;
@@ -191,25 +205,22 @@ ssize_t scull_write(struct file *filp, const char __user *buf,size_t count, loff
                 retval += ret;
             }
             gap += new_count; 
-            count -= new_count;
-            printk("SCULL_WRITE : count_final %ld ",count);
-        }      
+            count -= new_count;    
+         }      
 
     }
-    
-    
-
-    
+           
     char *ptr = &dev->data[dev->start];
 
     printk("SCULL_WRITE : dev->ptrWrite =  %s",ptr);
-    //printk("SCULL_WRITE : dev->size =  %d",dev->size);
+    printk("SCULL_WRITE : dev->size =  %d",dev->size);
     //printk("SCULL_WRITE : dev->end =  %d",dev->end);
     //return retval;
     
     out:
         printk("SCULL_WRITE : out function");
-        //up(&dev->sem);
+ //       mutex_unlock(&dev->mutexWR);
+        if(flag > 0) up(&dev->sem);
         return retval;
 }
 
@@ -272,7 +283,7 @@ static int __init scull_init(void){
     }else{
         result = alloc_chrdev_region(&dev,scull_minor,scull_nr_devs,"scull_fifo");
         scull_major = MAJOR(dev);
-        printk(KERN_ALERT "SCULL_INIT : Hi, I am T-800!");
+        printk(KERN_ALERT "SCULL_INIT : Hi, I'm back!");
         printk("SCULL_INIT : Major: %d\n",MAJOR(dev));
     }
     
@@ -299,7 +310,9 @@ static int __init scull_init(void){
         scull_devices[i].size = 0;
         scull_devices[i].start = 0;
         scull_devices[i].end = 0;
-        //semaforo usado para proteger a escrita e leitura
+        //mutex usado para proteger a escrita e leitura
+        //mutex_init(&scull_devices[i].mutexWR);
+        //semaforo para bloquear processos
         sema_init(&scull_devices[i].sem,1);
         scull_setup_cdev(&scull_devices[i],i);
     }
